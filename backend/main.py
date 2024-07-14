@@ -1,4 +1,3 @@
-# main.py
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
@@ -34,12 +33,15 @@ async def reset_conversation():
 
 @fastapi_app.post("/post_text/")
 async def post_text(file: UploadFile = File(...)):
-    with open(file.filename, "wb") as buffer:
-        buffer.write(file.file.read())
-    audio_input = open(file.filename, "rb")
-
+    file_path = f"temp_{file.filename}"
     try:
-        text = recorder.record_text_tr(audio_input)
+        with open(file_path, "wb") as buffer:
+            buffer.write(file.file.read())
+        
+        # Log file path for debugging
+        print(f"File saved at {file_path}")
+        
+        text = recorder.record_text_tr(file_path)
         if text:
             translated_text = translator.translate_text(text)
         else:
@@ -54,6 +56,9 @@ async def post_text(file: UploadFile = File(...)):
     except Exception as e:
         print(f"An error occurred: {e}")
         raise HTTPException(status_code=500, detail="Internal Server Error")
+    finally:
+        if os.path.exists(file_path):
+            os.remove(file_path)
 
 # Initialize Socket.IO server
 sio = socketio.AsyncServer(cors_allowed_origins="*")

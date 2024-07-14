@@ -3,7 +3,6 @@ import Title from "./Title";
 import axios from "axios";
 import Recordmessage from "./RecordMessage";
 
-
 const Controller = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [messages, setMessages] = useState<any[]>([]);
@@ -69,7 +68,7 @@ const Controller = () => {
         <div className="fixed bottom-0 w-full py-6 border-t text-center bg-gradient-to-r from-blue-900 to-purple-900">
           <div className="flex justify-center items-center w-full">
             <div>
-              <Recordmessage handleStop={handleStop} />
+              <Recordmessage handleStop={handleStop}/>
             </div>
           </div>
         </div>
@@ -79,3 +78,4 @@ const Controller = () => {
 };
 
 export default Controller;
+

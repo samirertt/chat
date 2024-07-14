@@ -1,14 +1,14 @@
 import speech_recognition as sr
 
 recognizer = sr.Recognizer()
-def record_text_tr(audio_input):
+
+def record_text_tr(file_path):
     """Identify speech from the audio input and return it as text."""
-    type(audio_input)
     try:
-        with sr.AudioFile(audio_input) as source:
+        with sr.AudioFile(file_path) as source:
             recognizer.adjust_for_ambient_noise(source, duration=0.5)
             audio = recognizer.listen(source)
-            turkish_text = recognizer.recognize_google_cloud(audio, language="tr-TR")
+            turkish_text = recognizer.recognize_google(audio, language="tr-TR")
             return turkish_text
     except sr.RequestError as e:
         print(f"Could not request results from the speech recognition service; {e}")
