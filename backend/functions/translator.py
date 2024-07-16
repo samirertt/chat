@@ -1,9 +1,13 @@
 from translate import Translator
 
-def translate_text(text):
-    """Translate the provided text from Turkish to English."""
+def translate_text(text, language):
+
     try:
-        translator = Translator(from_lang="tr", to_lang="en")
+        if language == "tr-TR":
+            translator = Translator(from_lang="tr", to_lang="en")
+        else:
+            translator = Translator(from_lang="en", to_lang="tr")
+            
         result = translator.translate(text)
         return result
     except Exception as e:

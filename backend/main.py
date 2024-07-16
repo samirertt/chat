@@ -1,4 +1,4 @@
-from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi import FastAPI, File, Form, Response, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 import socketio
@@ -25,6 +25,14 @@ fastapi_app.add_middleware(
     allow_headers=["*"],
 )
 
+@fastapi_app.get("/")
+async def read_root():
+    return {"message": "Welcome to the FastAPI application"}
+
+@fastapi_app.get("/favicon.ico")
+async def favicon():
+    return Response(status_code=204)
+
 # FastAPI endpoints
 @fastapi_app.get("/reset")
 async def reset_conversation():
@@ -32,18 +40,23 @@ async def reset_conversation():
     return {"response": "conversation reset"}
 
 @fastapi_app.post("/post_text/")
-async def post_text(file: UploadFile = File(...)):
+async def post_text(file: UploadFile = File(...), language: str = Form(...)):
     file_path = f"temp_{file.filename}"
     try:
         with open(file_path, "wb") as buffer:
             buffer.write(file.file.read())
         
-        # Log file path for debugging
+        # Log file path and language for debugging
         print(f"File saved at {file_path}")
+        print(f"Selected language: {language}")
         
-        text = recorder.record_text_tr(file_path)
+        if language == "tr-TR":
+            text = recorder.record_text_tr(file_path)
+        else:
+            text = recorder.record_text_en(file_path)
+        
         if text:
-            translated_text = translator.translate_text(text)
+            translated_text = translator.translate_text(text, language)
         else:
             raise HTTPException(status_code=400, detail="Could not process audio file")
 

@@ -4,6 +4,7 @@ import io, { Socket } from 'socket.io-client';
 import Message from '../components/message';
 import RecordMessage from '../components/RecordMessage';
 import axios from 'axios';
+import Dropdown from '../components/dropdown';
 
 interface MessageType {
   username: string;
@@ -24,6 +25,7 @@ const ChatRoom: React.FC = () => {
   const [messages, setMessages] = useState<MessageType[]>([]);
   const [messageText, setMessageText] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [selectedLanguage, setSelectedLanguage] = useState<string>(''); // State for selected language
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -39,8 +41,8 @@ const ChatRoom: React.FC = () => {
   };
 
   const sendMessage = () => {
-    if (username && messageText.trim() !== '') { // Ensure username and messageText are defined before sending message
-      socket.emit('send_message', { username, text: messageText });
+    if (username && messageText.trim() !== '') {
+      socket.emit('send_message', { username, text: messageText, language: selectedLanguage }); // Include selected language in message
       setMessageText('');
     }
   };
@@ -64,6 +66,7 @@ const ChatRoom: React.FC = () => {
 
       const formData = new FormData();
       formData.append('file', blob, 'myFile.wav');
+      formData.append('language', selectedLanguage); // Append selected language to form data
 
       const res = await axios.post('http://localhost:8000/post_text/', formData, {
         headers: {
@@ -80,10 +83,15 @@ const ChatRoom: React.FC = () => {
     }
   };
 
+  // Function to handle dropdown change and update selected language
+  const handleDropdownChange = (value: string) => {
+    setSelectedLanguage(value);
+  };
+
   return (
-    <div className="flex flex-col h-screen bg-gray-100">
-      <header className="bg-black text-white text-center py-4">
-        <h1 className="text-2xl">Real-Time Chat App</h1>
+    <div className="flex flex-col h-screen bg-gray-100 bg-cover bg-custom-rachel-image bg-center">
+      <header className="bg-gradient-to-r from-teal-600 to-gray-600 text-white text-center py-4">
+        <h1 className="text-2xl">Real-Time Chat</h1>
       </header>
       <main className="flex-grow overflow-auto p-4">
         <div className="messages space-y-4">
@@ -98,7 +106,7 @@ const ChatRoom: React.FC = () => {
           <div ref={messagesEndRef}></div>
         </div>
       </main>
-      <footer className="bg-gray-200 p-4">
+      <footer className="bg-gradient-to-r from-teal-600 to-gray-600 p-1">
         <div className="input-box flex space-x-2 items-center">
           <input
             type="text"
@@ -106,15 +114,17 @@ const ChatRoom: React.FC = () => {
             onChange={handleInputChange}
             onKeyPress={handleInputKeyPress}
             placeholder="Type your message..."
-            className="flex-grow p-2 border border-gray-300 rounded"
+            className="flex-grow p-4 border border-gray-300 rounded bg-gradient-to-r from-gray-100 to-gray-400 focus:outline-none "
           />
           <button
             onClick={sendMessage}
-            className="bg-blue-500 text-white p-2 rounded hover:bg-blue-600 w-14 h-10"
+            className="bg-green-600 text-white p-2 rounded hover:bg-green-700 w-14 h-10"
           >
             Send
           </button>
           <RecordMessage handleStop={handleStop} />
+          {/* Pass handleDropdownChange function to Dropdown component */}
+          <Dropdown onChange={handleDropdownChange} />
         </div>
         {isLoading && <p>Loading...</p>}
       </footer>

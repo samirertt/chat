@@ -20,6 +20,12 @@ const RecordMessage = ({ handleStop }: Props) => {
     handleStop(wavBlobUrl);
   };
 
+  let message = '';
+
+  // Define the message based on the status
+ 
+  
+  
   return (
     <ReactMediaRecorder
       audio
@@ -36,7 +42,7 @@ const RecordMessage = ({ handleStop }: Props) => {
               size='w-8 h-8'
             />
           </button>
-          <p className="mt-2 text-white font-light">{status}</p>
+          <p className="mt-2 text-white font-light">{status === 'idle' ? message = "": message = status}</p>
         </div>
       )}
     />

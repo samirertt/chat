@@ -1,4 +1,5 @@
 import Controller from "../components/Controller";
+import '../index.css';  
 
 function App() {
 

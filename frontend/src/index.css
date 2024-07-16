@@ -7,3 +7,12 @@ body {
   min-width: 320px;
   min-height: 100vh;
 }
+
+/* styles.css or global.css */
+.hide-scrollbar {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;  /* Chrome, Safari, and Opera */
+}
