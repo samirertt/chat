@@ -30,12 +30,12 @@ const Controller = () => {
 
       const res = await axios.post("http://localhost:8000/post_text/", formData, {
         headers: {
-          "Content-Type": "audio/wav",
+          'Content-Type': 'multipart/form-data',
         },
       });
 
-      const responseText = res.data;
-      const RachelMessage = { sender: "Rachel", text: responseText };
+      const { text, translated_text } = res.data;
+      const RachelMessage = { sender: "Rachel", text: translated_text };
       setMessages([...messagesArr, RachelMessage]);
     } catch (error) {
       console.error(error);

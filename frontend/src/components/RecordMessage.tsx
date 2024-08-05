@@ -1,51 +1,87 @@
-import React from 'react';
-import { ReactMediaRecorder } from 'react-media-recorder';
+import React, { useState, useEffect } from 'react';
+import { MediaRecorder, register } from 'extendable-media-recorder';
+import { connect } from 'extendable-media-recorder-wav-encoder'; // For WAV encoding
 import RecordIcon from './RecordIcon';
-import { convertWebMToWAV } from '../utils/convertwebm2wav';
 
 type Props = {
   handleStop: (blobUrl: string) => void;
-
 };
 
 const RecordMessage = ({ handleStop }: Props) => {
-  const handleStopRecording = async (blobUrl: string) => {
-    const response = await fetch(blobUrl);
-    const webmBlob = await response.blob();
+  const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-    // Convert WebM to WAV
-    const wavBlob = await convertWebMToWAV(webmBlob);
-    const wavBlobUrl = URL.createObjectURL(wavBlob);
+  useEffect(() => {
+    const initRecorder = async () => {
+      try {
+        // Register the WAV encoder
+        await register(await connect());
 
-    handleStop(wavBlobUrl);
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const recorder = new MediaRecorder(stream, { mimeType: 'audio/wav' }) as MediaRecorder;
+
+        setMediaRecorder(recorder);
+
+        // Clean up the stream when the component unmounts
+        return () => {
+          stream.getTracks().forEach(track => track.stop());
+        };
+      } catch (err) {
+        console.error('Error initializing media recorder:', err);
+      }
+    };
+
+    initRecorder();
+  }, []);
+
+  const toggleRecording = () => {
+    if (mediaRecorder) {
+      if (isRecording) {
+        mediaRecorder.stop();
+        setIsRecording(false);
+        console.log("Recording stopped");
+      } else {
+        mediaRecorder.start();
+        setIsRecording(true);
+        console.log("Recording started");
+      }
+    }
   };
 
-  let message = '';
+  useEffect(() => {
+    if (mediaRecorder) {
+      mediaRecorder.ondataavailable = async (event) => {
+        console.log('Data available:', event.data);
+        if (event.data.size > 0) {
+          const audioBlob = new Blob([event.data], { type: 'audio/wav' });
+          const audioUrl = URL.createObjectURL(audioBlob);
+          console.log('Audio URL:', audioUrl);
+          handleStop(audioUrl);
+        } else {
+          console.error("No data available");
+        }
+      };
 
-  // Define the message based on the status
- 
-  
-  
+      mediaRecorder.onerror = (event) => {
+        console.error('MediaRecorder error:', event);
+        setError('An error occurred while recording.');
+      };
+    }
+  }, [mediaRecorder, handleStop]);
+
   return (
-    <ReactMediaRecorder
-      audio
-      onStop={handleStopRecording}
-      render={({ status, startRecording, stopRecording }) => (
-        <div className="mt-2">
-          <button
-            onMouseDown={startRecording}
-            onMouseUp={stopRecording}
-            className="bg-white p-4 rounded-full"
-          >
-            <RecordIcon
-              classText={status === 'recording' ? 'animate-pulse text-red-500' : 'text-gray-400'}
-              size='w-8 h-8'
-            />
-          </button>
-          <p className="mt-2 text-white font-light">{status === 'idle' ? message = "": message = status}</p>
-        </div>
-      )}
-    />
+    <div className="mt-2">
+      <button
+        onClick={toggleRecording}
+        className="bg-white p-4 rounded-full"
+      >
+        <RecordIcon
+          classText={isRecording ? 'animate-pulse text-red-500' : 'text-gray-400'}
+          size='w-8 h-8'
+        />
+      </button>
+    </div>
   );
 };
 

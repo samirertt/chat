@@ -1,4 +1,4 @@
-import React, { useState, useEffect, ChangeEvent, useRef, KeyboardEvent } from 'react';
+import React, { useState, useEffect, ChangeEvent, KeyboardEvent, useRef } from 'react';
 import { useParams, useLocation } from 'react-router-dom';
 import io, { Socket } from 'socket.io-client';
 import Message from '../components/message';
@@ -9,41 +9,74 @@ import Dropdown from '../components/dropdown';
 interface MessageType {
   username: string;
   text: string;
+  translated_text: string;
 }
 
 interface LocationState {
   username: string;
+  selectedLanguage: string;
 }
 
 const socket: Socket = io('http://localhost:5000');
 
 const ChatRoom: React.FC = () => {
-  const { roomId } = useParams<{ roomId: string }>(); // Only roomId from params
-  const location = useLocation(); 
-  const state = location.state as LocationState; // Explicitly cast the location state
-  const username = state?.username || ''; // Use default empty string if username is undefined
+  const { roomId } = useParams<{ roomId: string }>();
+  const location = useLocation();
+  const state = location.state as LocationState;
+  const username = state?.username || '';
   const [messages, setMessages] = useState<MessageType[]>([]);
   const [messageText, setMessageText] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [selectedLanguage, setSelectedLanguage] = useState<string>(''); // State for selected language
+  const [selectedLanguage, setSelectedLanguage] = useState<string>(state?.selectedLanguage || '');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    if (roomId) {
+      socket.emit('join_room', roomId);
+      socket.emit('set_language', selectedLanguage); // Set the user's language
+    }
+
+    const handleMessage = (message: MessageType) => {
+      setMessages((prevMessages) => [...prevMessages, message]);
+    };
+
     socket.on('message', handleMessage);
 
     return () => {
       socket.off('message', handleMessage);
+      if (roomId) {
+        socket.emit('leave_room', roomId);
+      }
     };
-  }, []);
+  }, [roomId, selectedLanguage]);
 
-  const handleMessage = (message: MessageType) => {
-    setMessages((prevMessages) => [...prevMessages, message]);
-  };
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
 
-  const sendMessage = () => {
+  const sendMessage = async () => {
     if (username && messageText.trim() !== '') {
-      socket.emit('send_message', { username, text: messageText, language: selectedLanguage }); // Include selected language in message
-      setMessageText('');
+      setIsLoading(true);
+
+      try {
+        // Send message to backend for translation
+        const res = await axios.post('http://localhost:8000/text_translate/', {
+          text: messageText,
+          language: selectedLanguage
+        });
+
+        const { text, translated_text } = res.data;
+
+        // Emit the message to Socket.IO server
+        socket.emit('send_message', { roomId, username, text, translated_text });
+
+        setMessageText('');
+      } catch (error) {
+        console.error('Error sending message:', error);
+        alert('Failed to send message');
+      } finally {
+        setIsLoading(false);
+      }
     }
   };
 
@@ -66,26 +99,32 @@ const ChatRoom: React.FC = () => {
 
       const formData = new FormData();
       formData.append('file', blob, 'myFile.wav');
-      formData.append('language', selectedLanguage); // Append selected language to form data
+      formData.append('language', selectedLanguage);
 
+      // Send audio file to backend for processing
       const res = await axios.post('http://localhost:8000/post_text/', formData, {
         headers: {
-          'Content-Type': 'audio/wav',
+          'Content-Type': 'multipart/form-data',
         },
       });
 
-      const responseText = res.data;
-      setMessageText(responseText);
+      const { text, translated_text } = res.data;
+
+      // Emit the processed message to Socket.IO server
+      socket.emit('send_message', { roomId, username, text, translated_text });
+
+      setMessageText('');
     } catch (error) {
-      console.error(error);
+      console.error('Error handling audio:', error);
+      alert('Failed to process audio');
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Function to handle dropdown change and update selected language
   const handleDropdownChange = (value: string) => {
     setSelectedLanguage(value);
+    socket.emit('set_language', value); // Update the user's language on the server
   };
 
   return (
@@ -99,8 +138,10 @@ const ChatRoom: React.FC = () => {
             <Message
               key={index}
               username={message.username}
-              text={message.text}
-              currentUser={username} // Pass current username
+              text={message.username === username ? message.text : ''}
+              translated_text={message.translated_text}
+              currentUser={username}
+              selectedLanguage={selectedLanguage}
             />
           ))}
           <div ref={messagesEndRef}></div>
@@ -114,7 +155,7 @@ const ChatRoom: React.FC = () => {
             onChange={handleInputChange}
             onKeyPress={handleInputKeyPress}
             placeholder="Type your message..."
-            className="flex-grow p-4 border border-gray-300 rounded bg-gradient-to-r from-gray-100 to-gray-400 focus:outline-none "
+            className="flex-grow p-4 border border-gray-300 rounded bg-gradient-to-r from-gray-100 to-gray-400 focus:outline-none"
           />
           <button
             onClick={sendMessage}
@@ -123,7 +164,6 @@ const ChatRoom: React.FC = () => {
             Send
           </button>
           <RecordMessage handleStop={handleStop} />
-          {/* Pass handleDropdownChange function to Dropdown component */}
           <Dropdown onChange={handleDropdownChange} />
         </div>
         {isLoading && <p>Loading...</p>}

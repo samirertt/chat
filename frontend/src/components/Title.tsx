@@ -33,7 +33,7 @@ function Title({ setMessages }: Props) {
   return (
     <div className="flex justify-between items-center w-full p-2 bg-gradient-to-r from-teal-600 to-gray-600 text-white font-bold shadow">
       <a href="/chat" className="px-4 py-2 font-semibold rounded-lg shadow-md duration-500 hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-opacity-75">Chat</a>
-      <div className="italic text-xl">Yes.Egitim</div>
+      <div className="italic text-xl">Tchats</div>
       <button
         onClick={resetConversation}
         className={
