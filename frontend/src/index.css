@@ -8,11 +8,23 @@ body {
   min-height: 100vh;
 }
 
-/* styles.css or global.css */
-.hide-scrollbar {
-  -ms-overflow-style: none;  /* IE and Edge */
-  scrollbar-width: none;  /* Firefox */
+::-webkit-scrollbar
+{
+  display: none;
 }
-.hide-scrollbar::-webkit-scrollbar {
-  display: none;  /* Chrome, Safari, and Opera */
+
+.loginpage
+{
+  background: url("../images/rachel_bg.jpg") no-repeat;
+  background-position: center center;
+  background-size: cover;
+}
+.logincard
+{
+  background: rgba(255, 255, 255, 0.09);
+  box-shadow: 8px 8px 40px rgba(0, 0, 0, 0.09);
+  backdrop-filter:blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 2px solid rgba(255, 255, 255, 0.61);
+  z-index: 49;
 }

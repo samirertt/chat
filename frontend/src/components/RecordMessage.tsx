@@ -74,7 +74,7 @@ const RecordMessage = ({ handleStop }: Props) => {
     <div className="mt-2">
       <button
         onClick={toggleRecording}
-        className="bg-white p-4 rounded-full"
+        className="bg-white p-4 rounded-full "
       >
         <RecordIcon
           classText={isRecording ? 'animate-pulse text-red-500' : 'text-gray-400'}

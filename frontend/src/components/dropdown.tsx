@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 interface DropdownProps {
   onChange: (value: string) => void;
@@ -7,6 +7,8 @@ interface DropdownProps {
 const Dropdown: React.FC<DropdownProps> = ({ onChange }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [selectedOption, setSelectedOption] = useState('');
+  const [languages, setLanguages] = useState<{ [key: string]: string }>({});
+  const [searchTerm, setSearchTerm] = useState('');
 
   const toggleDropdown = () => {
     setIsOpen(!isOpen);
@@ -18,10 +20,98 @@ const Dropdown: React.FC<DropdownProps> = ({ onChange }) => {
     onChange(value);
   };
 
-  const optionTextMap: { [key: string]: string } = {
-    'tr-TR': 'Turkish',
-    'en-EN': 'English',
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchTerm(e.target.value.toLowerCase());
   };
+
+  useEffect(() => {
+    // Simulating a fetch for supported languages
+    const fetchLanguages = async () => {
+      // Full list of supported languages
+      const supportedLanguages = {
+        'af': 'Afrikaans',
+        'sq': 'Albanian',
+        'ar': 'Arabic',
+        'az': 'Azerbaijani',
+        'eu': 'Basque',
+        'be': 'Belarusian',
+        'bn': 'Bengali',
+        'bs': 'Bosnian',
+        'bg': 'Bulgarian',
+        'ca': 'Catalan',
+        'ceb': 'Cebuano',
+        'zh-CN': 'Chinese (Simplified)',
+        'zh-TW': 'Chinese (Traditional)',
+        'hr': 'Croatian',
+        'cs': 'Czech',
+        'da': 'Danish',
+        'nl': 'Dutch',
+        'en': 'English',
+        'eo': 'Esperanto',
+        'et': 'Estonian',
+        'fil': 'Filipino',
+        'fi': 'Finnish',
+        'fr': 'French',
+        'gl': 'Galician',
+        'ka': 'Georgian',
+        'de': 'German',
+        'el': 'Greek',
+        'gu': 'Gujarati',
+        'ht': 'Haitian Creole',
+        'he': 'Hebrew',
+        'hi': 'Hindi',
+        'hu': 'Hungarian',
+        'is': 'Icelandic',
+        'id': 'Indonesian',
+        'ga': 'Irish',
+        'it': 'Italian',
+        'ja': 'Japanese',
+        'jv': 'Javanese',
+        'kn': 'Kannada',
+        'ko': 'Korean',
+        'la': 'Latin',
+        'lv': 'Latvian',
+        'lt': 'Lithuanian',
+        'mk': 'Macedonian',
+        'ml': 'Malayalam',
+        'mn': 'Mongolian',
+        'mr': 'Marathi',
+        'my': 'Burmese',
+        'ne': 'Nepali',
+        'no': 'Norwegian',
+        'pl': 'Polish',
+        'pt': 'Portuguese',
+        'pa': 'Punjabi',
+        'ro': 'Romanian',
+        'ru': 'Russian',
+        'sr': 'Serbian',
+        'sk': 'Slovak',
+        'sl': 'Slovenian',
+        'es-ES': 'Spanish',
+        'su': 'Sundanese',
+        'sw': 'Swahili',
+        'sv': 'Swedish',
+        'ta': 'Tamil',
+        'te': 'Telugu',
+        'th': 'Thai',
+        'tr': 'Turkish',
+        'uk': 'Ukrainian',
+        'ur': 'Urdu',
+        'vi': 'Vietnamese',
+        'cy': 'Welsh',
+        'yi': 'Yiddish'
+      };
+
+      setLanguages(supportedLanguages);
+    };
+
+    fetchLanguages();
+  }, []);
+
+  // Filter languages based on search term
+  const filteredLanguages = Object.entries(languages).filter(([code, name]) =>
+    name.toLowerCase().includes(searchTerm)
+  );
 
   return (
     <div className="relative inline-block text-left">
@@ -53,45 +143,44 @@ const Dropdown: React.FC<DropdownProps> = ({ onChange }) => {
         </svg>
       </button>
 
-      <div
-        id="dropdownTop"
-        className={`absolute right-0 mt-2 w-32 bg-white divide-y divide-gray-100 rounded-lg shadow-lg dark:bg-gray-700 ${isOpen ? 'bottom-full' : 'hidden'}`}
-      >
-        <div className="flex items-center p-2">
+      {isOpen && (
+        <div
+          id="dropdownTop"
+          className="absolute right-0 mt-2 w-64 bg-white divide-y divide-gray-100 rounded-lg shadow-lg dark:bg-gray-700 max-h-60 overflow-auto bottom-full"
+        >
           <input
-            id="default-radio-1"
-            type="radio"
-            value="tr-TR"
-            name="default-radio"
-            checked={selectedOption === 'tr-TR'}
-            onChange={handleRadioChange}
-            className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600"
+            type="text"
+            placeholder="Search..."
+            value={searchTerm}
+            onChange={handleSearchChange}
+            className="w-full px-2 py-1 border-b border-gray-300 dark:border-gray-600 focus:outline-none dark:bg-gray-700 dark:text-white"
           />
-          <label
-            htmlFor="default-radio-1"
-            className="ms-2 text-sm font-medium text-gray-900 dark:text-gray-300"
-          >
-            Turkish
-          </label>
+          {filteredLanguages.map(([code, name]) => (
+            <div className="flex items-center p-2" key={code}>
+              <input
+                id={`radio-${code}`}
+                type="radio"
+                value={code}
+                name="default-radio"
+                checked={selectedOption === code}
+                onChange={handleRadioChange}
+                className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600"
+              />
+              <label
+                htmlFor={`radio-${code}`}
+                className="ms-2 text-sm font-medium text-gray-900 dark:text-gray-300"
+              >
+                {name}
+              </label>
+            </div>
+          ))}
+          {filteredLanguages.length === 0 && (
+            <div className="p-2 text-sm text-gray-500 dark:text-gray-400">
+              No languages found.
+            </div>
+          )}
         </div>
-        <div className="flex items-center p-2">
-          <input
-            id="default-radio-2"
-            type="radio"
-            value="en-EN"
-            name="default-radio"
-            checked={selectedOption === 'en-EN'}
-            onChange={handleRadioChange}
-            className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600"
-          />
-          <label
-            htmlFor="default-radio-2"
-            className="ms-2 text-sm font-medium text-gray-900 dark:text-gray-300"
-          >
-            English
-          </label>
-        </div>
-      </div>
+      )}
     </div>
   );
 };

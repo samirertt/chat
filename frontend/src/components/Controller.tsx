@@ -46,7 +46,7 @@ const Controller = () => {
 
   return (
     <div className="h-screen overflow-y-hidden bg-cover bg-custom-rachel-image bg-center">
-      <Title setMessages={setMessages} />
+      <Title username="samir" />
       <div className="flex flex-col justify-between h-full overflow-y-scroll pb-96">
         <div className="mt-5 px-5">
           {messages.map((message, index) => (

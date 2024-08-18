@@ -1,13 +1,13 @@
 from translate import Translator
+from langdetect import detect
 
-def translate_text(text, language):
 
+def translate_textt(text,language):
+    
     try:
-        if language == "tr-TR":
-            translator = Translator(from_lang="tr", to_lang="en")
-        else:
-            translator = Translator(from_lang="en", to_lang="tr")
-            
+        lang_text = detect(text)
+        translator = Translator(from_lang=lang_text, to_lang=language)
+        
         result = translator.translate(text)
         return result
     except Exception as e:

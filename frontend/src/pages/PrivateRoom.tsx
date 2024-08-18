@@ -5,11 +5,13 @@ import Message from '../components/message';
 import RecordMessage from '../components/RecordMessage';
 import axios from 'axios';
 import Dropdown from '../components/dropdown';
+import Title from '../components/Title';
 
 interface MessageType {
   username: string;
   text: string;
   translated_text: string;
+  audio?: string;
 }
 
 interface LocationState {
@@ -23,7 +25,7 @@ const ChatRoom: React.FC = () => {
   const { roomId } = useParams<{ roomId: string }>();
   const location = useLocation();
   const state = location.state as LocationState;
-  const username = state?.username || '';
+  const username = state?.username || 'Anonym'; // Default to 'Anonym' if username is not available
   const [messages, setMessages] = useState<MessageType[]>([]);
   const [messageText, setMessageText] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -33,17 +35,36 @@ const ChatRoom: React.FC = () => {
   useEffect(() => {
     if (roomId) {
       socket.emit('join_room', roomId);
-      socket.emit('set_language', selectedLanguage); // Set the user's language
+      socket.emit('set_language', selectedLanguage);
     }
 
     const handleMessage = (message: MessageType) => {
       setMessages((prevMessages) => [...prevMessages, message]);
     };
 
+    const handleVoiceMessage = ({ username, audio }: { username: string; audio: string }) => {
+      console.log(`Received voice message from ${username}`);
+
+      try {
+        const audioData = Uint8Array.from(atob(audio), c => c.charCodeAt(0));
+        const blob = new Blob([audioData], { type: 'audio/mpeg' });
+        const audioUrl = URL.createObjectURL(blob);
+
+        setMessages(prevMessages => [
+          ...prevMessages,
+          { username, text: '[Voice Message]', translated_text: '', audio },
+        ]);
+      } catch (error) {
+        console.error('Error handling voice message:', error);
+      }
+    };
+
     socket.on('message', handleMessage);
+    socket.on('voice_message', handleVoiceMessage);
 
     return () => {
       socket.off('message', handleMessage);
+      socket.off('voice_message', handleVoiceMessage);
       if (roomId) {
         socket.emit('leave_room', roomId);
       }
@@ -59,15 +80,12 @@ const ChatRoom: React.FC = () => {
       setIsLoading(true);
 
       try {
-        // Send message to backend for translation
         const res = await axios.post('http://localhost:8000/text_translate/', {
           text: messageText,
           language: selectedLanguage
         });
 
         const { text, translated_text } = res.data;
-
-        // Emit the message to Socket.IO server
         socket.emit('send_message', { roomId, username, text, translated_text });
 
         setMessageText('');
@@ -101,17 +119,13 @@ const ChatRoom: React.FC = () => {
       formData.append('file', blob, 'myFile.wav');
       formData.append('language', selectedLanguage);
 
-      // Send audio file to backend for processing
       const res = await axios.post('http://localhost:8000/post_text/', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
       });
-
       const { text, translated_text } = res.data;
-
-      // Emit the processed message to Socket.IO server
-      socket.emit('send_message', { roomId, username, text, translated_text });
+      socket.emit('send_voice_message', { roomId, username, translated_text });
 
       setMessageText('');
     } catch (error) {
@@ -124,50 +138,49 @@ const ChatRoom: React.FC = () => {
 
   const handleDropdownChange = (value: string) => {
     setSelectedLanguage(value);
-    socket.emit('set_language', value); // Update the user's language on the server
+    socket.emit('set_language', value);
   };
 
   return (
-    <div className="flex flex-col h-screen bg-gray-100 bg-cover bg-custom-rachel-image bg-center">
-      <header className="bg-gradient-to-r from-teal-600 to-gray-600 text-white text-center py-4">
-        <h1 className="text-2xl">Real-Time Chat</h1>
-      </header>
-      <main className="flex-grow overflow-auto p-4">
-        <div className="messages space-y-4">
-          {messages.map((message, index) => (
-            <Message
-              key={index}
-              username={message.username}
-              text={message.username === username ? message.text : ''}
-              translated_text={message.translated_text}
-              currentUser={username}
-              selectedLanguage={selectedLanguage}
-            />
-          ))}
-          <div ref={messagesEndRef}></div>
-        </div>
-      </main>
-      <footer className="bg-gradient-to-r from-teal-600 to-gray-600 p-1">
-        <div className="input-box flex space-x-2 items-center">
+    <div className='flex flex-col h-screen bg-cover bg-center bg-custom-rachel-image'>
+      <Title username={username} />
+      <div className="flex flex-col h-full">
+        <main className="flex-grow overflow-auto p-2 bg-opacity-50 ">
+          <div className="messages space-y-2 p-2">
+            {messages.map((message, index) => (
+              <Message
+                key={index}
+                username={message.username}
+                text={message.username === username ? message.text : ''}
+                translated_text={message.translated_text}
+                currentUser={username}
+                
+                audio={message.audio}
+              />
+            ))}
+            <div ref={messagesEndRef}></div>
+          </div>
+        </main>
+        <footer className="bg-gradient-to-r from-teal-600 to-gray-600 p-2 flex items-center space-x-2">
           <input
             type="text"
             value={messageText}
             onChange={handleInputChange}
             onKeyPress={handleInputKeyPress}
             placeholder="Type your message..."
-            className="flex-grow p-4 border border-gray-300 rounded bg-gradient-to-r from-gray-100 to-gray-400 focus:outline-none"
+            className="flex-grow p-2 border border-gray-300 rounded bg-gray-100 focus:outline-none"
           />
           <button
             onClick={sendMessage}
-            className="bg-green-600 text-white p-2 rounded hover:bg-green-700 w-14 h-10"
+            className="bg-green-600 text-white p-2 rounded hover:bg-green-700"
           >
             Send
           </button>
           <RecordMessage handleStop={handleStop} />
           <Dropdown onChange={handleDropdownChange} />
-        </div>
-        {isLoading && <p>Loading...</p>}
-      </footer>
+          {isLoading && <p className="text-white">Loading...</p>}
+        </footer>
+      </div>
     </div>
   );
 };

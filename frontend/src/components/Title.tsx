@@ -1,62 +1,36 @@
-import { useState } from "react";
-import axios from "axios";
+import { useNavigate } from "react-router-dom";
+import { useState} from 'react';
 
 type Props = {
-  setMessages: any;
+
+  username: string;
 };
 
-function Title({ setMessages }: Props) {
-  const [isResetting, setIsResetting] = useState(false);
+function Title({username }: Props) {
+  const navigate = useNavigate();
 
-  // Reset conversation
-  const resetConversation = async () => {
-    setIsResetting(true);
-
-    await axios
-      .get("http://localhost:8000/reset", {
-        headers: {
-          "Content-Type": "application/json",
-        },
-      })
-      .then((res) => {
-        if (res.status == 200) {
-          setMessages([]);
-        }
-      })
-      .catch((err) => {
-        console.error(err.message);
-      });
-
-    setIsResetting(false);
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    navigate('/')
   };
 
   return (
-    <div className="flex justify-between items-center w-full p-2 bg-gradient-to-r from-teal-600 to-gray-600 text-white font-bold shadow">
-      <a href="/chat" className="px-4 py-2 font-semibold rounded-lg shadow-md duration-500 hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-opacity-75">Chat</a>
-      <div className="italic text-xl">Tchats</div>
+    <div className="flex justify-between items-center w-full p-2 bg-gradient-to-r from-teal-600 to-gray-600 text-white font-bold shadow relative">
       <button
-        onClick={resetConversation}
-        className={
-          "transition-all duration-300 text-blue-300 hover:text-pink-500 " +
-          (isResetting && "animate-pulse")
-        }
+        onClick={handleLogout}
+        className="px-4 py-2 font-semibold rounded-lg shadow-md duration-500 hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-opacity-75"
       >
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        fill="none"
-        viewBox="0 0 24 24"
-        strokeWidth={1.5}
-        stroke="currentColor"
-        className="w-6 h-6"
-      >
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"
-        />
-      </svg>
-    </button>
-  </div>
+        Logout
+      </button>
+      <div className="absolute left-1/2 transform -translate-x-1/2 italic text-xl">
+        Tchats
+      </div>
+      <div className="ml-auto flex items-center space-x-4">
+        <div className="flex items-center space-x-2">
+          <span className="text-white text-sm">{username}</span>
+        </div>
+      </div>
+    </div>
   );
 }
 
