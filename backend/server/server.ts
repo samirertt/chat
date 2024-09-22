@@ -15,14 +15,38 @@ const io = new Server(server, {
 app.use(cors());
 app.use(express.json());
 
-// Store user language preferences and room memberships
 const userLanguages = new Map<string, string>(); // { socketId: language }
-const roomUsers = new Map<string, Set<string>>(); // { roomId: Set<socketId> }
+const roomUsers = new Map<string, Map<string, string>>(); // { roomId: Map<socketId, username> }
 
-// Route to check if the server is running
-app.get('/', (req: Request, res: Response) => {
-  res.send('Socket.IO Server is running');
-});
+// Helper functions to manage room users
+const addUserToRoom = (roomId: string, socketId: string, username: string) => {
+  if (!roomUsers.has(roomId)) {
+    roomUsers.set(roomId, new Map());
+  }
+  const roomMap = roomUsers.get(roomId)!;
+  roomMap.set(socketId, username);
+};
+
+const removeUserFromRoom = (roomId: string, socketId: string) => {
+  const roomMap = roomUsers.get(roomId);
+  if (roomMap) {
+    roomMap.delete(socketId);
+    if (roomMap.size === 0) {
+      roomUsers.delete(roomId);
+    }
+  }
+};
+
+const getUsersInRoom = (roomId: string): Map<string, string> | undefined => {
+  return roomUsers.get(roomId);
+};
+
+const emitRoomUsers = (roomId: string) => {
+  const users = getUsersInRoom(roomId);
+  if (users) {
+    io.to(roomId).emit('room_users', Array.from(users.entries()));
+  }
+};
 
 // Helper function to translate text
 const translateText = async (text: string, language: string): Promise<string> => {
@@ -39,16 +63,14 @@ const translateText = async (text: string, language: string): Promise<string> =>
 };
 
 // Helper function to get voice message
-const getVoiceMessage = async (text: string): Promise<Buffer> => {
+const getVoiceMessage = async (text: string, selectedGender: string): Promise<Buffer> => {
   try {
-    // Send a POST request to the server
     const response = await axios.post('http://localhost:8000/text_voice', {
       text,
+      selectedGender,
     }, {
-      responseType: 'arraybuffer', // Ensure response is treated as binary data
+      responseType: 'arraybuffer',
     });
-
-    // Convert the response data to a Buffer
     return Buffer.from(response.data);
   } catch (error) {
     console.error('Error getting text to voice:', error);
@@ -56,19 +78,32 @@ const getVoiceMessage = async (text: string): Promise<Buffer> => {
   }
 };
 
+const mapToObject = (map: Map<any, any>): object => {
+  const obj: any = {};
+  map.forEach((value, key) => {
+    obj[key] = value instanceof Map ? mapToObject(value) : value;
+  });
+  return obj;
+};
+
 // Socket.IO event listeners
 io.on('connection', (socket: Socket) => {
   console.log('A user connected:', socket.id);
 
+  socket.on('request_room_users', () => {
+    const convertedData = mapToObject(roomUsers);
+    socket.emit('room_users', convertedData);
+  });
   // Handle joining a chat room
-  socket.on('join_room', (roomId: string) => {
+  socket.on('join_room', (roomId: string, username: string) => {
     socket.join(roomId);
     console.log(`User ${socket.id} joined room ${roomId}`);
 
-    if (!roomUsers.has(roomId)) {
-      roomUsers.set(roomId, new Set());
-    }
-    roomUsers.get(roomId)?.add(socket.id);
+    addUserToRoom(roomId, socket.id, username);
+    console.log('Users in room:', username);
+
+    // Emit updated room users list
+    emitRoomUsers(roomId);
   });
 
   // Handle leaving a chat room
@@ -76,10 +111,10 @@ io.on('connection', (socket: Socket) => {
     socket.leave(roomId);
     console.log(`User ${socket.id} left room ${roomId}`);
 
-    roomUsers.get(roomId)?.delete(socket.id);
-    if (roomUsers.get(roomId)?.size === 0) {
-      roomUsers.delete(roomId);
-    }
+    removeUserFromRoom(roomId, socket.id);
+
+    // Emit updated room users list
+    emitRoomUsers(roomId);
   });
 
   // Handle setting language preference
@@ -92,60 +127,57 @@ io.on('connection', (socket: Socket) => {
   socket.on('send_message', async ({ roomId, username, text }: { roomId: string, username: string, text: string }) => {
     console.log('Received message:', { roomId, username, text });
 
-    const roomUserSockets = roomUsers.get(roomId) || new Set();
+    const roomUserSockets = getUsersInRoom(roomId);
 
     // Send the original and translated message to all users in the room
-    for (const clientId of roomUserSockets) {
-      try {
-        const clientLanguage = userLanguages.get(clientId) || 'en';
-        console.log(`Translating message for user ${clientId} to language ${clientLanguage}`);
-        const translatedText = await translateText(text, clientLanguage);
-        io.to(clientId).emit('message', { username, text, translated_text: translatedText });
-      } catch (error) {
-        console.error(`Error sending message to user ${clientId}:`, error);
+    if (roomUserSockets) {
+      for (const [clientId, _] of roomUserSockets) {
+        try {
+          const clientLanguage = userLanguages.get(clientId) || 'en';
+          const translatedText = await translateText(text, clientLanguage);
+          io.to(clientId).emit('message', { username, text, translated_text: translatedText });
+        } catch (error) {
+          console.error(`Error sending message to user ${clientId}:`, error);
+        }
       }
     }
   });
 
   // Handle sending voice messages
-  socket.on('send_voice_message', async ({ roomId, username, translated_text }) => {
-    console.log('Received voice message request:', { roomId, username, translated_text });
-  
-    const roomUserSockets = roomUsers.get(roomId) || new Set();
-  
-    for (const clientId of roomUserSockets) {
-      try {
-        const clientLanguage = userLanguages.get(clientId) || 'en';
-        console.log(`Processing voice message for user ${clientId} in language ${clientLanguage}`);
-        const translatedText = await translateText(translated_text, clientLanguage);
-        console.log(`Translated text for user ${clientId}: ${translatedText}`);
-        
-        const audioData = await getVoiceMessage(translatedText);
-        console.log(`Audio data length for user ${clientId}: ${audioData.length}`);
-        
-        io.to(clientId).emit('voice_message', { username, audio: audioData.toString('base64') });
-      } catch (error) {
-        console.error(`Error sending voice message to user ${clientId}:`, error);
+  socket.on('send_voice_message', async ({ roomId, username, translated_text, selectedGender }) => {
+    console.log('Received voice message request:', { roomId, username, translated_text, selectedGender });
+
+    const roomUserSockets = getUsersInRoom(roomId);
+
+    if (roomUserSockets) {
+      for (const [clientId, _] of roomUserSockets) {
+        try {
+          const clientLanguage = userLanguages.get(clientId) || 'en';
+          const translatedText = await translateText(translated_text, clientLanguage);
+          const audioData = await getVoiceMessage(translatedText, selectedGender);
+          io.to(clientId).emit('voice_message', { username, audio: audioData.toString('base64') });
+        } catch (error) {
+          console.error(`Error sending voice message to user ${clientId}:`, error);
+        }
       }
     }
   });
-  
 
   // Handle disconnection
   socket.on('disconnect', () => {
     console.log('User disconnected:', socket.id);
     userLanguages.delete(socket.id);
 
-    roomUsers.forEach((users, roomId) => {
-      if (users.has(socket.id)) {
-        users.delete(socket.id);
-        if (users.size === 0) {
-          roomUsers.delete(roomId);
-        }
+    roomUsers.forEach((roomMap, roomId) => {
+      if (roomMap.has(socket.id)) {
+        removeUserFromRoom(roomId, socket.id);
+        emitRoomUsers(roomId);
       }
     });
   });
 });
+
+
 
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {

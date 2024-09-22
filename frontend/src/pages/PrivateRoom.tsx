@@ -1,11 +1,11 @@
 import React, { useState, useEffect, ChangeEvent, KeyboardEvent, useRef } from 'react';
-import { useParams, useLocation } from 'react-router-dom';
+import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import io, { Socket } from 'socket.io-client';
 import Message from '../components/message';
 import RecordMessage from '../components/RecordMessage';
 import axios from 'axios';
-import Dropdown from '../components/dropdown';
 import Title from '../components/Title';
+import Sidebar from '../components/activeusers';
 
 interface MessageType {
   username: string;
@@ -17,6 +17,7 @@ interface MessageType {
 interface LocationState {
   username: string;
   selectedLanguage: string;
+  selectedGender: string;
 }
 
 const socket: Socket = io('http://localhost:5000');
@@ -25,50 +26,68 @@ const ChatRoom: React.FC = () => {
   const { roomId } = useParams<{ roomId: string }>();
   const location = useLocation();
   const state = location.state as LocationState;
-  const username = state?.username || 'Anonym'; // Default to 'Anonym' if username is not available
+  const username = state?.username; 
   const [messages, setMessages] = useState<MessageType[]>([]);
   const [messageText, setMessageText] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [selectedLanguage, setSelectedLanguage] = useState<string>(state?.selectedLanguage || '');
+  const [selectedLanguage] = useState<string>(state?.selectedLanguage || '');
+  const [selectedGender] = useState<string>(state?.selectedGender || '');
+
+  const [usersInRoom, setUsersInRoom] = useState<string[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!username || !selectedLanguage) {
+      navigate('/chat', { state: { roomId } });
+    }
+  }, [username, selectedLanguage, navigate]);
 
   useEffect(() => {
     if (roomId) {
-      socket.emit('join_room', roomId);
+      socket.emit('join_room', roomId, username);
       socket.emit('set_language', selectedLanguage);
+
+      // Handle room users
+      socket.on('room_users', (users: [string, string][]) => {
+        setUsersInRoom(users.map(([_, username]) => username));
+      });
+
+
+      // Handle incoming messages and voice messages
+      const handleMessage = (message: MessageType) => {
+        setMessages(prevMessages => [...prevMessages, message]);
+      };
+
+      const handleVoiceMessage = ({ username, audio }: { username: string; audio: string }) => {
+        try {
+          const audioData = Uint8Array.from(atob(audio), c => c.charCodeAt(0));
+          const blob = new Blob([audioData], { type: 'audio/mpeg' });
+          const audioUrl = URL.createObjectURL(blob);
+
+          setMessages(prevMessages => [
+            ...prevMessages,
+            { username, text: '[Voice Message]', translated_text: '', audio },
+          ]);
+        } catch (error) {
+          console.error('Error handling voice message:', error);
+        }
+      };
+
+      socket.on('message', handleMessage);
+      socket.on('voice_message', handleVoiceMessage);
+
+      return () => {
+        socket.off('room_users');
+        socket.off('user_joined');
+        socket.off('user_left');
+        socket.off('message', handleMessage);
+        socket.off('voice_message', handleVoiceMessage);
+        if (roomId) {
+          socket.emit('leave_room', roomId);
+        }
+      };
     }
-
-    const handleMessage = (message: MessageType) => {
-      setMessages((prevMessages) => [...prevMessages, message]);
-    };
-
-    const handleVoiceMessage = ({ username, audio }: { username: string; audio: string }) => {
-      console.log(`Received voice message from ${username}`);
-
-      try {
-        const audioData = Uint8Array.from(atob(audio), c => c.charCodeAt(0));
-        const blob = new Blob([audioData], { type: 'audio/mpeg' });
-        const audioUrl = URL.createObjectURL(blob);
-
-        setMessages(prevMessages => [
-          ...prevMessages,
-          { username, text: '[Voice Message]', translated_text: '', audio },
-        ]);
-      } catch (error) {
-        console.error('Error handling voice message:', error);
-      }
-    };
-
-    socket.on('message', handleMessage);
-    socket.on('voice_message', handleVoiceMessage);
-
-    return () => {
-      socket.off('message', handleMessage);
-      socket.off('voice_message', handleVoiceMessage);
-      if (roomId) {
-        socket.emit('leave_room', roomId);
-      }
-    };
   }, [roomId, selectedLanguage]);
 
   useEffect(() => {
@@ -125,7 +144,7 @@ const ChatRoom: React.FC = () => {
         },
       });
       const { text, translated_text } = res.data;
-      socket.emit('send_voice_message', { roomId, username, translated_text });
+      socket.emit('send_voice_message', { roomId, username, translated_text, selectedGender });
 
       setMessageText('');
     } catch (error) {
@@ -136,17 +155,13 @@ const ChatRoom: React.FC = () => {
     }
   };
 
-  const handleDropdownChange = (value: string) => {
-    setSelectedLanguage(value);
-    socket.emit('set_language', value);
-  };
-
   return (
-    <div className='flex flex-col h-screen bg-cover bg-center bg-custom-rachel-image'>
-      <Title username={username} />
-      <div className="flex flex-col h-full">
-        <main className="flex-grow overflow-auto p-2 bg-opacity-50 ">
-          <div className="messages space-y-2 p-2">
+    <div className='flex h-screen loginpage'>
+      <div className="flex-grow flex flex-col h-full">
+        <Title username={username}  usersInRoom={usersInRoom} />
+        <main className="flex-grow overflow-auto bg-opacity-50">
+          
+          <div className="messages space-y-2 p-2 mt-12 ">
             {messages.map((message, index) => (
               <Message
                 key={index}
@@ -154,14 +169,14 @@ const ChatRoom: React.FC = () => {
                 text={message.username === username ? message.text : ''}
                 translated_text={message.translated_text}
                 currentUser={username}
-                
                 audio={message.audio}
               />
             ))}
             <div ref={messagesEndRef}></div>
           </div>
         </main>
-        <footer className="bg-gradient-to-r from-teal-600 to-gray-600 p-2 flex items-center space-x-2">
+
+        <footer className="bg-gradient-to-r from-teal-600 to-gray-600 p-1 flex items-center space-x-2">
           <input
             type="text"
             value={messageText}
@@ -177,8 +192,6 @@ const ChatRoom: React.FC = () => {
             Send
           </button>
           <RecordMessage handleStop={handleStop} />
-          <Dropdown onChange={handleDropdownChange} />
-          {isLoading && <p className="text-white">Loading...</p>}
         </footer>
       </div>
     </div>

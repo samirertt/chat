@@ -34,8 +34,8 @@ const Message: React.FC<MessageProps> = ({
     <div className={messageClass}>
       <p className="font-bold">{username}</p>
       {audio ? (
-        <div className="flex flex-col items-start mt-2">
-          <audio controls className="w-full max-w-xs">
+        <div className="flex flex-col items-start mt-2 ">
+          <audio controls className="w-full max-w-xs ">
             {audioUrl && <source src={audioUrl} type="audio/mpeg" />}
             Your browser does not support the audio element.
           </audio>

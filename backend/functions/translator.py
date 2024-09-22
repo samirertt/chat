@@ -1,7 +1,6 @@
 from translate import Translator
 from langdetect import detect
 
-
 def translate_textt(text,language):
     
     try:
@@ -13,3 +12,4 @@ def translate_textt(text,language):
     except Exception as e:
         print(f"An error occurred while translating: {e}")
         return None
+    

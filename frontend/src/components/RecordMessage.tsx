@@ -11,76 +11,95 @@ const RecordMessage = ({ handleStop }: Props) => {
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [mediaStream, setMediaStream] = useState<MediaStream | null>(null);
 
-  useEffect(() => {
-    const initRecorder = async () => {
-      try {
-        // Register the WAV encoder
-        await register(await connect());
+  const initRecorder = async () => {
+    try {
+      // Register the WAV encoder
+      await register(await connect());
 
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        const recorder = new MediaRecorder(stream, { mimeType: 'audio/wav' }) as MediaRecorder;
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream, { mimeType: 'audio/wav' }) as MediaRecorder;
 
-        setMediaRecorder(recorder);
+      setMediaRecorder(recorder);
+      setMediaStream(stream); // Save the media stream for cleanup
 
-        // Clean up the stream when the component unmounts
-        return () => {
-          stream.getTracks().forEach(track => track.stop());
-        };
-      } catch (err) {
-        console.error('Error initializing media recorder:', err);
-      }
-    };
-
-    initRecorder();
-  }, []);
-
-  const toggleRecording = () => {
-    if (mediaRecorder) {
-      if (isRecording) {
-        mediaRecorder.stop();
-        setIsRecording(false);
-        console.log("Recording stopped");
-      } else {
-        mediaRecorder.start();
-        setIsRecording(true);
-        console.log("Recording started");
-      }
-    }
-  };
-
-  useEffect(() => {
-    if (mediaRecorder) {
-      mediaRecorder.ondataavailable = async (event) => {
-        console.log('Data available:', event.data);
+      recorder.ondataavailable = async (event) => {
         if (event.data.size > 0) {
           const audioBlob = new Blob([event.data], { type: 'audio/wav' });
           const audioUrl = URL.createObjectURL(audioBlob);
-          console.log('Audio URL:', audioUrl);
           handleStop(audioUrl);
         } else {
           console.error("No data available");
         }
       };
 
-      mediaRecorder.onerror = (event) => {
+      recorder.onerror = (event) => {
         console.error('MediaRecorder error:', event);
         setError('An error occurred while recording.');
       };
+
+      recorder.onstop = () => {
+        cleanup();
+      };
+
+      return recorder;
+    } catch (err) {
+      console.error('Error initializing media recorder:', err);
+      setError('Failed to initialize recorder.');
+      return null;
     }
-  }, [mediaRecorder, handleStop]);
+  };
+
+  const cleanup = () => {
+    if (mediaRecorder) {
+      mediaRecorder.stream.getTracks().forEach(track => track.stop());
+      setMediaRecorder(null);
+    }
+    if (mediaStream) {
+      mediaStream.getTracks().forEach(track => track.stop());
+    }
+    setIsRecording(false);
+  };
+
+  useEffect(() => {
+    // Cleanup function to stop the stream when the component unmounts
+    return () => {
+      cleanup();
+    };
+  }, [mediaStream, mediaRecorder]);
+
+  const toggleRecording = async () => {
+    if (!mediaRecorder) {
+      const recorder = await initRecorder();
+      if (!recorder) return;
+    }
+
+    if (mediaRecorder) {
+      if (isRecording) {
+        mediaRecorder.stop();
+        console.log("Recording stopped");
+      } else {
+        mediaRecorder.start();
+        console.log("Recording started");
+      }
+
+      setIsRecording(!isRecording);
+    }
+  };
 
   return (
-    <div className="mt-2">
+    <div className="mt-4 flex flex-col items-center xs:mb-3">
       <button
         onClick={toggleRecording}
-        className="bg-white p-4 rounded-full "
+        className="bg-white p-3 rounded-full shadow-md flex items-center justify-center"
       >
         <RecordIcon
           classText={isRecording ? 'animate-pulse text-red-500' : 'text-gray-400'}
-          size='w-8 h-8'
+          size="w-6 h-6 sm:w-7 sm:h-7 md:w-8 md:h-8 lg:w-8 lg:h-8"
         />
       </button>
+      {error && <p className="text-red-500 text-xs sm:text-sm md:text-base mt-2">{error}</p>}
     </div>
   );
 };

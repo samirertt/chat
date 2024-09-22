@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState,KeyboardEvent } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 const SignupComponent = () => {
     const [fullname, setFullname] = useState('');
@@ -8,8 +9,20 @@ const SignupComponent = () => {
     const [confirmPassword, setConfirmPassword] = useState('');
     const [errorMessage, setErrorMessage] = useState('');
     const [successMessage, setSuccessMessage] = useState('');
+    const navigate = useNavigate();
 
+    const handleInputKeyPress = (e: KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === 'Enter') {
+            handleSubmit();
+          }
+      };
     const handleSubmit = async () => {
+        // Check if all fields are filled
+        if (!fullname || !username || !email || !password || !confirmPassword) {
+            setErrorMessage('All fields are required');
+            return;
+        }
+
         // Check if passwords match
         if (password !== confirmPassword) {
             setErrorMessage('Passwords do not match');
@@ -37,6 +50,9 @@ const SignupComponent = () => {
         if (response.ok) {
             const data = await response.json();
             setSuccessMessage(data.message || 'Signup successful');
+            setTimeout(() => {
+                navigate('/chat', { state: { username } });
+            }, 1000); // 2000ms = 2 seconds
         } else {
             const errorData = await response.json();
             setErrorMessage(errorData.detail || 'An error occurred');
@@ -68,6 +84,7 @@ const SignupComponent = () => {
                             id='fullname'
                             value={fullname}
                             onChange={(e) => setFullname(e.target.value)}
+                            onKeyPress={handleInputKeyPress}
                             className='w-full h-12 p-4 outline-none bg-transparent border-[2px] border-gray-200/40 text-white rounded-md'
                         />
                     </div>
@@ -78,6 +95,7 @@ const SignupComponent = () => {
                             id='username'
                             value={username}
                             onChange={(e) => setUsername(e.target.value)}
+                            onKeyPress={handleInputKeyPress}
                             className='w-full h-12 p-4 outline-none bg-transparent border-[2px] border-gray-200/40 text-white rounded-md'
                         />
                     </div>
@@ -92,6 +110,7 @@ const SignupComponent = () => {
                         id='email'
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
+                        onKeyPress={handleInputKeyPress}
                         className='w-full h-12 p-4 outline-none bg-transparent border-[2px] border-gray-200/40 text-white rounded-md'
                     />
                 </div>
@@ -103,6 +122,7 @@ const SignupComponent = () => {
                             id='password'
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
+                            onKeyPress={handleInputKeyPress}
                             className='w-full h-12 p-4 outline-none bg-transparent border-[2px] border-gray-200/40 text-white rounded-md'
                         />
                     </div>
@@ -113,6 +133,7 @@ const SignupComponent = () => {
                             id='confirmPassword'
                             value={confirmPassword}
                             onChange={(e) => setConfirmPassword(e.target.value)}
+                            onKeyPress={handleInputKeyPress}
                             className='w-full h-12 p-4 outline-none bg-transparent border-[2px] border-gray-200/40 text-white rounded-md'
                         />
                     </div>

@@ -6,10 +6,9 @@ module.exports = {
   ],
   theme: {
     extend: {
-      backgroundImage: {
-        'custom-image': "url(images/image-bg.jpg)",
-        'custom-rachel-image':" url(images/rachel_bg.jpg)"
-      }
+      screens: {
+        'xs': '100px', // Custom breakpoint for extra-small screens
+      },
     },
   },
   plugins: [],

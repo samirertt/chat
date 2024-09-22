@@ -1,27 +1,19 @@
-from fastapi import FastAPI, File, Form, Request, Response, UploadFile, HTTPException
+import json
+import time
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Response, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.params import Depends
-from fastapi.responses import JSONResponse
-from fastapi.responses import StreamingResponse
-import socketio
+from pydantic import BaseModel
 import uvicorn
 import os
-from functions import database, translator, recorder, text_to_speech
-from pydantic import BaseModel
+from functions import database
+from functions import recorder, translator, text_to_speech
 from sqlalchemy import Column, Integer, String, create_engine
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
-from passlib.context import CryptContext
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import sessionmaker, Session
+from fastapi.responses import JSONResponse, StreamingResponse
+import socketio
 
-class TranslationRequest(BaseModel):
-    text: str
-    language: str
-
-class Voice_textReq(BaseModel):
-    text: str
-
-# Initialize FastAPI app
+# Define the FastAPI app
 app = FastAPI()
 
 # CORS middleware
@@ -30,7 +22,6 @@ origins = [
     "http://localhost:5174",
     "http://localhost:4173",
     "http://localhost:3000",
-    
 ]
 
 app.add_middleware(
@@ -41,6 +32,82 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Define your data models
+class TranslationRequest(BaseModel):
+    text: str
+    language: str
+
+class Voice_textReq(BaseModel):
+    text: str
+    selectedGender: str
+
+import json
+from fastapi import WebSocket, WebSocketDisconnect
+
+@app.websocket("/ws/audio")
+async def audio_streaming(websocket: WebSocket):
+    await websocket.accept()
+    
+    wav_data = None
+    selected_Lang = None
+    
+    try:
+        while True:
+            message_type = await websocket.receive()  # General receive method
+            print("Received message from websocket")
+
+            # Handle incoming message if it's a dictionary (language settings)
+            if 'text' in message_type:
+                try:
+                    # Parse the received text message as JSON (language settings)
+                    selected_Lang = json.loads(message_type['text'])
+                    if isinstance(selected_Lang, dict):
+                        print(f"Received language settings: {selected_Lang}")
+                    else:
+                        await websocket.send_text(json.dumps({"error": "Invalid language settings format. Expected a dictionary."}))
+
+                except json.JSONDecodeError:
+                    await websocket.send_text(json.dumps({"error": "Invalid JSON format."}))
+
+            # Handle incoming message if it's binary data (WAV file)
+            elif 'bytes' in message_type:
+                wav_data = message_type['bytes']
+                print("Received binary WAV data")
+
+                if wav_data is not None and selected_Lang is not None:
+                    # Extract the language settings (selectedFrom and selectedTo)
+                    selectedTo = selected_Lang.get('selectedTo')
+                    selectedFrom = selected_Lang.get('selectedFrom')
+
+                    try:
+                        # Assuming 'recorder.recognize_stream' is your speech recognition function
+                        text = recorder.recognize_stream(wav_data, selectedFrom)
+
+                        if text:
+                            # Assuming 'translator.translate_textt' is your translation function
+                            translatedText = translator.translate_textt(text, selectedTo)
+
+                            if translatedText:
+                                # Create a JSON object with both the transcribed and translated text
+                                message = {
+                                    "transcribedText": text,
+                                    "translatedText": translatedText
+                                }
+
+                                # Send the JSON message back to the client
+                                await websocket.send_text(json.dumps(message))
+
+                    except Exception as e:
+                        print("problem")
+
+                else:
+                    await websocket.send_text(json.dumps({"error": "Missing WAV data or language settings."}))
+
+    except WebSocketDisconnect:
+        print("WebSocket disconnected")
+
+
+# Define other endpoints
 @app.get("/")
 async def read_root():
     return {"message": "Welcome to the FastAPI application"}
@@ -49,31 +116,18 @@ async def read_root():
 async def favicon():
     return Response(status_code=204)
 
-# FastAPI endpoints
-@app.get("/reset")
-async def reset_conversation():
-    database.reset_messages()
-    return {"response": "conversation reset"}
-
-
 @app.post("/text_voice/")
 async def text_voice(request: Voice_textReq):
-    
     if not request.text:
         raise HTTPException(status_code=400, detail="Text parameter is required")
-    
     try:
-        audio_output = text_to_speech.convert_text_to_speech(request.text)
-
+        audio_output = text_to_speech.convert_text_to_speech(request.text, request.selectedGender)
         def iterfile():
             yield audio_output
-        
         return StreamingResponse(iterfile(), media_type="application/octet-stream")
-    
     except Exception as e:
         print(f"An error occurred: {e}")
         raise HTTPException(status_code=500, detail="Internal Server Error")
-
 
 @app.post("/post_text/")
 async def post_text(file: UploadFile = File(...), language: str = Form(...)):
@@ -81,20 +135,15 @@ async def post_text(file: UploadFile = File(...), language: str = Form(...)):
     try:
         with open(file_path, "wb") as buffer:
             buffer.write(file.file.read())
-        
         print(f"File saved at {file_path}")
         print(f"Selected language: {language}")
-        
         text = recorder.record_text(file_path, language)
-        
         if text:
             translated_text = translator.translate_textt(text, language)
         else:
             raise HTTPException(status_code=400, detail="Could not process audio file")
-
         database.store_messages(text, translated_text)
         return JSONResponse(content={"text": text, "translated_text": translated_text})
-
     except Exception as e:
         print(f"An error occurred: {e}")
         raise HTTPException(status_code=500, detail="Internal Server Error")
@@ -111,39 +160,19 @@ async def text_translation(request: TranslationRequest):
         print(f"An error occurred: {e}")
         raise HTTPException(status_code=500, detail="Internal Server Error")
 
-#DATABASE
-# SQLAlchemy setup
-DATABASE_URL = "sqlite:///./test.db"  # You can change the database URL as needed
-
+# Database setup
+DATABASE_URL = "sqlite:///./main.db"
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
-# Password hashing
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-class User(Base):
-    __tablename__ = "users"
-
-    id = Column(Integer, primary_key=True, index=True)
-    fullname = Column(String, index=True)
-    username = Column(String, unique=True, index=True)
-    email = Column(String, unique=True, index=True)
-    hashed_password = Column(String)
-
-# Create the database tables
-Base.metadata.create_all(bind=engine)
-
 class AnonymCode(Base):
     __tablename__ = "anonym_codes"
-
     id = Column(Integer, primary_key=True, index=True)
     code = Column(String, unique=True, index=True)
 
-# Update the database with the new table
 Base.metadata.create_all(bind=engine)
 
-# Dependency to get the database session
 def get_db():
     db = SessionLocal()
     try:
@@ -151,61 +180,12 @@ def get_db():
     finally:
         db.close()
 
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
-
-class UserSignup(BaseModel):
-    fullname: str
-    username: str
-    email: str
-    password: str
-
-@app.post("/signup/")
-async def signup(user: UserSignup, db: Session = Depends(get_db)):
-    # Check if username or email already exists
-    existing_user = db.query(User).filter((User.username == user.username) | (User.email == user.email)).first()
-    
-    if existing_user:
-        if existing_user.username == user.username:
-            raise HTTPException(status_code=400, detail="Username already in use")
-        if existing_user.email == user.email:
-            raise HTTPException(status_code=400, detail="Email already in use")
-
-    hashed_password = pwd_context.hash(user.password)
-    new_user = User(fullname=user.fullname, username=user.username, email=user.email, hashed_password=hashed_password)
-    
-    try:
-        db.add(new_user)
-        db.commit()
-        db.refresh(new_user)
-    except Exception as e:
-        db.rollback()
-        print(f"An error occurred: {e}")
-        raise HTTPException(status_code=500, detail="Internal Server Error")
-    
-    return {"message": "User created successfully", "user": new_user.username}
-
-
-class LoginRequest(BaseModel):
-    username: str
-    password: str
-
-@app.post("/login/")
-async def login(request: LoginRequest, db: Session = Depends(get_db)):
-    db_user = db.query(User).filter(User.username == request.username).first()
-    if not db_user or not verify_password(request.password, db_user.hashed_password):
-        raise HTTPException(status_code=400, detail="Invalid username or password")
-    # You can include more information in the response if needed
-    return {"message": "Login successful", "username": db_user.username}
-
-
 class AnonymCodeRequest(BaseModel):
     code: str
 
 @app.post("/save_anonym_code/")
 async def save_anonym_code(request: AnonymCodeRequest, db: Session = Depends(get_db)):
     new_code = AnonymCode(code=request.code)
-
     try:
         db.add(new_code)
         db.commit()
@@ -214,7 +194,6 @@ async def save_anonym_code(request: AnonymCodeRequest, db: Session = Depends(get
         db.rollback()
         print(f"An error occurred: {e}")
         raise HTTPException(status_code=500, detail="Internal Server Error")
-
     return {"message": "Anonym code saved successfully", "code": new_code.code}
 
 @app.post("/check_anonym_code/")
@@ -224,9 +203,9 @@ async def check_anonym_code(request: AnonymCodeRequest, db: Session = Depends(ge
         return {"exists": True}
     else:
         return {"exists": False}
+
 # Initialize Socket.IO server
 sio = socketio.AsyncServer(cors_allowed_origins="*")
-
 user_languages = {}
 
 @sio.event
